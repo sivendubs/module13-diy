@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:batch="http://www.mulesoft.org/schema/mule/batch"
+	xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="7e8d2227-dcab-40a2-843b-b0d5592bdb55" >
+		<db:my-sql-connection host="${db.host}" port="${db.port}" user="${db.user}" password="${db.password}" database="${db.database}" />
+	</db:config>
+	<vm:config name="VM_Config" doc:name="VM Config" doc:id="55f667f9-3f0f-4f73-94a6-f6d43ae9d440" >
+		<vm:queues >
+			<vm:queue queueName="validate" />
+		</vm:queues>
+	</vm:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="6ec86ad3-cdac-4fa6-86b6-faf955287491" file="dev-configuration.yaml" />
+	<flow name="module13-diyFlow" doc:id="8f7f5a4e-b6ac-4689-b2bd-9e28f65de893" >
+		<scheduler doc:name="Scheduler" doc:id="106c7ce8-3aee-489e-8ca1-75f566f7ab63" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="60" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<os:retrieve doc:name="maxtransID" doc:id="83b189ab-993f-4014-8a7e-c2b7485adf30" key="maxtransID" target="maxtransID">
+			<os:default-value ><![CDATA[0]]></os:default-value>
+		</os:retrieve>
+		<db:select doc:id="12c77bfa-8110-41bc-9622-7a90ec52fe45" config-ref="Database_Config" doc:name="transactionDB">
+			<db:sql ><![CDATA[SELECT * FROM 	flights_transactions where transactionID > :maxtransID 
+LIMIT 10]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{maxtransID: vars.maxtransID}]]]></db:input-parameters>
+		</db:select>
+		<os:store doc:name="maxtransID" doc:id="76c1d15c-f0cd-4e45-b44c-27bb732baf73" key="maxtransID">
+			<os:value ><![CDATA[#[max(payload.*transactionID)]]]></os:value>
+		</os:store>
+		<batch:job jobName="module13-diyBatch_Job" doc:id="ed4a5b50-4838-4a09-acab-68d38a57aff7" maxFailedRecords="-1" schedulingStrategy="ROUND_ROBIN">
+			<batch:process-records >
+				<batch:step name="validateStep" doc:id="186646a2-937f-4aa8-885d-e4ca8c79ca77" >
+					<flow-ref doc:name="errorflow" doc:id="d533e364-c122-427b-ad96-a84c382a1058" name="errorflow" target="faultdata" />
+					<logger level="INFO" doc:name="Logger" doc:id="10f8302b-8f51-4b05-b1e9-e12b8f0a2d9d" message="#[vars.faultdata]"/>
+					<vm:publish-consume queueName="validate" doc:name="Publish consume" doc:id="052d6fa1-0a1a-4a68-ab4b-e3a1bebcd1a6" config-ref="VM_Config" target="transoutput" timeout="300"/>
+					<logger level="INFO" doc:name="Logger" doc:id="05b576e1-8f2e-498b-851f-e035739dcf8b" message="#[payload]"/>
+				</batch:step>
+				<batch:step name="writeTocsv" doc:id="1ae5312d-9953-48d8-924b-007850a02409" acceptExpression="#[vars.transoutput]">
+					<batch:aggregator doc:name="fileWrite" doc:id="a8145218-42ff-4dc2-a21c-99093e40fc16" size="50">
+						<file:write doc:name="Write" doc:id="8d71359e-362a-49d9-9077-a5c4d2b2bc90" path="#[p('filewrite') ++ '/Transaction-auditfile-$(now() as Number).csv']">
+							<file:content ><![CDATA[#[output application/csv
+---
+payload]]]></file:content>
+						</file:write>
+					</batch:aggregator>
+				</batch:step>
+				<batch:step name="writeErrorfiles" doc:id="8a0487d6-6114-416e-a5cf-c5097d3512b2" acceptPolicy="ONLY_FAILURES">
+					<logger level="INFO" doc:name="errorSummary" doc:id="50faf32d-108d-44d8-9a8a-9893890b2363" message='#["Record with transactionID : " ++  payload.transactionID ++ " failed with MULE Expression Error"]'/>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="summary" doc:id="98690a03-a31e-4f5a-8a01-bd4b2a060af4" message="#[payload]"/>
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+	<flow name="validate" doc:id="13efa91c-e76e-47d5-b691-3480d20e8943" >
+		<vm:listener doc:name="Listener" doc:id="8e4f55d6-69e5-4e46-8ce0-e5289aa21554" config-ref="VM_Config" queueName="validate"/>
+		<ee:transform doc:name="Transform Message" doc:id="1743fcf7-6f86-4302-b94a-afcb962635b8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+if(mod(payload.transactionID as Number, 4) == 0)
+	true
+else
+	false	
+]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="cc9a137e-07c9-4b0d-afbf-b4007497280f" message="#[payload]"/>
+	</flow>
+	<flow name="errorflow" doc:id="3929aac3-802c-4742-9d3f-b595ccbf6c61" >
+		<choice doc:name="Choice" doc:id="abce6404-f600-48c3-a924-d475ae44b245" >
+			<when expression="#[payload.transactionID as String endsWith '6']">
+				<ee:transform doc:name="Timer" doc:id="781d2f32-7a9a-47ac-9693-c50446960d8d" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+import * from dw::Runtime
+---
+
+payload wait 60000
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+		</choice>
+		<choice doc:name="Choice" doc:id="bf4e30e4-f1f7-4af5-bb92-02739d6be140" >
+			<when expression="#[(mod(payload.transactionID as Number, 5) == 0)]">
+				<raise-error doc:name="Raise error" doc:id="8e3695ab-12e9-47ab-a03c-a7de62d72841" type="EXPRESSION" description="Mule expression error occured for the current data"/>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="ab1f3538-e1e3-4f82-a4a1-5e7f652b9971" />
+			</otherwise>
+		</choice>
+	</flow>
+</mule>
