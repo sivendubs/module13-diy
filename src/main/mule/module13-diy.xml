@@ -35,7 +35,7 @@ LIMIT 10]]></db:sql>
 		<os:store doc:name="maxtransID" doc:id="76c1d15c-f0cd-4e45-b44c-27bb732baf73" key="maxtransID">
 			<os:value ><![CDATA[#[max(payload.*transactionID)]]]></os:value>
 		</os:store>
-		<batch:job jobName="module13-diyBatch_Job" doc:id="ed4a5b50-4838-4a09-acab-68d38a57aff7" maxFailedRecords="-1" schedulingStrategy="ROUND_ROBIN">
+		<batch:job jobName="module13-diyBatch_Job" doc:id="ed4a5b50-4838-4a09-acab-68d38a57aff7" maxFailedRecords="-1">
 			<batch:process-records >
 				<batch:step name="validateStep" doc:id="186646a2-937f-4aa8-885d-e4ca8c79ca77" >
 					<flow-ref doc:name="errorflow" doc:id="d533e364-c122-427b-ad96-a84c382a1058" name="errorflow" target="faultdata" />
@@ -63,7 +63,7 @@ payload]]]></file:content>
 	</flow>
 	<flow name="validate" doc:id="13efa91c-e76e-47d5-b691-3480d20e8943" >
 		<vm:listener doc:name="Listener" doc:id="8e4f55d6-69e5-4e46-8ce0-e5289aa21554" config-ref="VM_Config" queueName="validate"/>
-		<ee:transform doc:name="Transform Message" doc:id="1743fcf7-6f86-4302-b94a-afcb962635b8" >
+		<ee:transform doc:name="validation" doc:id="1743fcf7-6f86-4302-b94a-afcb962635b8" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/java
@@ -80,21 +80,6 @@ else
 		<logger level="INFO" doc:name="Logger" doc:id="cc9a137e-07c9-4b0d-afbf-b4007497280f" message="#[payload]"/>
 	</flow>
 	<flow name="errorflow" doc:id="3929aac3-802c-4742-9d3f-b595ccbf6c61" >
-		<choice doc:name="Choice" doc:id="abce6404-f600-48c3-a924-d475ae44b245" >
-			<when expression="#[payload.transactionID as String endsWith '6']">
-				<ee:transform doc:name="Timer" doc:id="781d2f32-7a9a-47ac-9693-c50446960d8d" >
-					<ee:message >
-						<ee:set-payload ><![CDATA[%dw 2.0
-output application/json
-import * from dw::Runtime
----
-
-payload wait 60000
-]]></ee:set-payload>
-					</ee:message>
-				</ee:transform>
-			</when>
-		</choice>
 		<choice doc:name="Choice" doc:id="bf4e30e4-f1f7-4af5-bb92-02739d6be140" >
 			<when expression="#[(mod(payload.transactionID as Number, 5) == 0)]">
 				<raise-error doc:name="Raise error" doc:id="8e3695ab-12e9-47ab-a03c-a7de62d72841" type="EXPRESSION" description="Mule expression error occured for the current data"/>
