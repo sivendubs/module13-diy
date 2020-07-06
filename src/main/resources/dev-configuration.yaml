@@ -5,4 +5,4 @@ db:
   password: "mule"
   database: "training"
 
-filewrite: "/Users/macrent/Desktop/files/transaction"
+filewrite: "/Users/vishnuprasad/Desktop/files/transaction"
