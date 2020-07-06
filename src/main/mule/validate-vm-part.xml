@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="validate-vm-partFlow" doc:id="bd05bc84-d651-4e3b-8ab2-733efc44273d" >
+		<vm:listener queueName="validate" doc:name="Listener" doc:id="bca6cab9-f783-495d-89ed-0415474520a1" config-ref="VM_Config" timeout="60"/>
+		<ee:transform doc:name="Transform Message" doc:id="d69c6f8d-8eec-4993-87fd-b7eb5e00482c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+if(mod(payload.transactionID as Number, 4) == 0)
+	true
+else
+	false]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="ad389c70-13ea-46dd-a80f-755696868a87" message="#[payload]"/>
+	</flow>
+</mule>
